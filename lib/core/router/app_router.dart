@@ -12,12 +12,22 @@ import 'package:students_app/features/students/presentation/screens/student_deta
 import 'package:students_app/features/students/presentation/screens/student_list_screen.dart';
 import 'package:students_app/features/students/presentation/screens/student_profile_screen.dart';
 
+// Helper: converts Riverpod state into a Listenable for GoRouter
+class _RouterNotifier extends ChangeNotifier {
+  _RouterNotifier(this._ref) {
+    _ref.listen(authProvider, (_, _) => notifyListeners());
+  }
+  final Ref _ref;
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  final notifier = _RouterNotifier(ref);
 
   return GoRouter(
     initialLocation: LoginScreen.routePath,
+    refreshListenable: notifier,
     redirect: (context, state) {
+      final authState = ref.read(authProvider);
       final isAuthenticating =
           state.matchedLocation == LoginScreen.routePath ||
           state.matchedLocation == RegisterScreen.routePath;
@@ -36,12 +46,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
           return null;
         },
-        loading: () {
-          if (!isAuthenticating) {
-            return LoginScreen.routePath;
-          }
-          return null;
-        },
+        loading: () => null,
         error: (error, stackTrace) => LoginScreen.routePath,
       );
     },

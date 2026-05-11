@@ -116,7 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (error.contains('weak password')) {
       return 'كلمة المرور ضعيفة جداً';
     }
-    return 'حدث خطأ، حاول مرة أخرى';
+    return error;
   }
 
   String? _validateFullName(String? value) {
