@@ -1,44 +1,58 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:students_app/features/students/data/repositories/student_profile_repository.dart';
 import 'package:students_app/features/students/domain/models/tracking_data.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Student profile repository provider.
-final studentProfileRepositoryProvider = Provider<StudentProfileRepository>((ref) {
+final studentProfileRepositoryProvider = Provider<StudentProfileRepository>((
+  ref,
+) {
   return StudentProfileRepository(Supabase.instance.client);
 });
 
 /// Student profile data provider.
 final studentProfileProvider =
     FutureProvider.family<StudentProfileData, String>((ref, studentId) async {
-  final repository = ref.watch(studentProfileRepositoryProvider);
-  return repository.fetchStudentProfile(studentId);
-});
+      final repository = ref.watch(studentProfileRepositoryProvider);
+      return repository.fetchStudentProfile(studentId);
+    });
 
 /// Student tracking provider with optimistic updates.
-final studentTrackingProvider = AsyncNotifierProvider.family<
-    StudentTrackingNotifier, StudentTrackingData, String>(
-  StudentTrackingNotifier.new,
-);
+final studentTrackingProvider =
+    StateNotifierProvider.family<
+      StudentTrackingNotifier,
+      AsyncValue<StudentTrackingData>,
+      String
+    >((ref, studentId) {
+      final repository = ref.watch(studentProfileRepositoryProvider);
+      return StudentTrackingNotifier(studentId, repository);
+    });
 
-final class StudentTrackingNotifier extends AsyncNotifier<StudentTrackingData> {
-  StudentTrackingNotifier(this._studentId);
+final class StudentTrackingNotifier
+    extends StateNotifier<AsyncValue<StudentTrackingData>> {
+  StudentTrackingNotifier(this._studentId, this._repository)
+    : super(const AsyncValue.loading()) {
+    _loadInitialTracking();
+  }
 
   final String _studentId;
-  late StudentProfileRepository _repository;
+  final StudentProfileRepository _repository;
 
-  @override
-  Future<StudentTrackingData> build() async {
-    _repository = ref.watch(studentProfileRepositoryProvider);
-    return _repository.fetchTodayTracking(_studentId);
+  Future<void> _loadInitialTracking() async {
+    state = await AsyncValue.guard(
+      () => _repository.fetchTodayTracking(_studentId),
+    );
   }
 
   Future<StudentProfileData> loadStudentProfile(String studentId) {
     return _repository.fetchStudentProfile(studentId);
   }
 
-  Future<StudentTrackingData> loadTodayTracking(String studentId, DateTime date) {
+  Future<StudentTrackingData> loadTodayTracking(
+    String studentId,
+    DateTime date,
+  ) {
     return _repository.fetchTodayTracking(studentId);
   }
 
@@ -74,7 +88,6 @@ final class StudentTrackingNotifier extends AsyncNotifier<StudentTrackingData> {
       await _repository.updateIbadaat(current.trackingId, field, value);
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-      rethrow;
     }
   }
 
@@ -102,9 +115,11 @@ final class StudentTrackingNotifier extends AsyncNotifier<StudentTrackingData> {
 
     try {
       await _repository.updateQuran(current.trackingId, updates);
+      state = await AsyncValue.guard(
+        () => _repository.fetchTodayTracking(_studentId),
+      );
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-      rethrow;
     }
   }
 
@@ -117,7 +132,9 @@ final class StudentTrackingNotifier extends AsyncNotifier<StudentTrackingData> {
           (habit) => HabitTrackingData(
             habitId: habit.habitId,
             name: habit.name,
-            completed: habit.habitId == habitId ? !habit.completed : habit.completed,
+            completed: habit.habitId == habitId
+                ? !habit.completed
+                : habit.completed,
           ),
         )
         .toList();
@@ -136,13 +153,19 @@ final class StudentTrackingNotifier extends AsyncNotifier<StudentTrackingData> {
 
     try {
       await _repository.toggleHabit(current.trackingId, habitId);
+      state = await AsyncValue.guard(
+        () => _repository.fetchTodayTracking(_studentId),
+      );
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-      rethrow;
     }
   }
 
-  Future<void> updateStudySession(String subject, double hours, double goal) async {
+  Future<void> updateStudySession(
+    String subject,
+    double hours,
+    double goal,
+  ) async {
     final current = state.maybeWhen(data: (data) => data, orElse: () => null);
     if (current == null) return;
 
@@ -166,11 +189,7 @@ final class StudentTrackingNotifier extends AsyncNotifier<StudentTrackingData> {
 
     if (!found) {
       updatedSessions.add(
-        StudySessionData(
-          subject: subject,
-          hoursSpent: hours,
-          dailyGoal: goal,
-        ),
+        StudySessionData(subject: subject, hoursSpent: hours, dailyGoal: goal),
       );
     }
 
@@ -187,10 +206,17 @@ final class StudentTrackingNotifier extends AsyncNotifier<StudentTrackingData> {
     );
 
     try {
-      await _repository.updateStudySession(current.trackingId, subject, hours, goal);
+      await _repository.updateStudySession(
+        current.trackingId,
+        subject,
+        hours,
+        goal,
+      );
+      state = await AsyncValue.guard(
+        () => _repository.fetchTodayTracking(_studentId),
+      );
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
-      rethrow;
     }
   }
 }

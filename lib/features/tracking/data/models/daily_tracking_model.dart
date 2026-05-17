@@ -4,27 +4,30 @@ final class DailyTrackingModel {
   const DailyTrackingModel({
     required this.studentId,
     required this.date,
-    required this.prayerScore,
-    required this.quranMemorizationPages,
-    required this.quranReviewPages,
-    required this.studyMinutes,
+    this.trackingId,
+    this.ibadaat = const Ibadaat(),
+    this.quran = const QuranData(),
+    this.habits = const [],
+    this.studySessions = const [],
   });
 
   final String studentId;
   final DateTime date;
-  final int prayerScore;
-  final int quranMemorizationPages;
-  final int quranReviewPages;
-  final int studyMinutes;
+  final String? trackingId;
+  final Ibadaat ibadaat;
+  final QuranData quran;
+  final List<HabitItem> habits;
+  final List<StudySession> studySessions;
 
   DailyTracking toEntity() {
     return DailyTracking(
       studentId: studentId,
       date: date,
-      prayerScore: prayerScore,
-      quranMemorizationPages: quranMemorizationPages,
-      quranReviewPages: quranReviewPages,
-      studyMinutes: studyMinutes,
+      trackingId: trackingId,
+      ibadaat: ibadaat,
+      quran: quran,
+      habits: habits,
+      studySessions: studySessions,
     );
   }
 }

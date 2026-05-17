@@ -5,7 +5,7 @@ import 'package:students_app/features/dashboard/domain/entities/dashboard_summar
 import 'package:students_app/features/dashboard/domain/use_cases/get_dashboard_summary_use_case.dart';
 
 final dashboardSummaryProvider = FutureProvider<DashboardSummary>((ref) {
-  final remoteDataSource = const DashboardRemoteDataSource();
+  final remoteDataSource = DashboardRemoteDataSource();
   final repository = DashboardRepositoryImpl(remoteDataSource);
   final useCase = GetDashboardSummaryUseCase(repository);
   return useCase();

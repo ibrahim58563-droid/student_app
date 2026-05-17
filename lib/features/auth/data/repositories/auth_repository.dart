@@ -28,8 +28,8 @@ final class UnknownAuthException extends AuthException {
 }
 
 /// Auth repository - handles Supabase authentication and profile fetching
-final class AuthRepository {
-  const AuthRepository(this._supabaseClient);
+final class AuthService {
+  const AuthService(this._supabaseClient);
 
   final SupabaseClient _supabaseClient;
 
@@ -131,7 +131,7 @@ final class AuthRepository {
         role: _parseRole(response['role'] as String? ?? 'student'),
       );
     } catch (e) {
-      throw UnknownAuthException('فشل في جلب بيانات المستخدم: ${e.toString()}');
+      throw UnknownAuthException('فشل في جلب بيانات المستخدم');
     }
   }
 

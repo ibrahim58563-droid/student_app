@@ -44,14 +44,13 @@ class StudentProfileScreen extends ConsumerWidget {
       body: SafeArea(
         child: profileState.when(
           data: (profile) => trackingState.when(
-            data: (tracking) =>
-                _buildContent(
-                  context,
-                  profile,
-                  tracking,
-                  weeklyProgressState,
-                  isAdmin,
-                ),
+            data: (tracking) => _buildContent(
+              context,
+              profile,
+              tracking,
+              weeklyProgressState,
+              isAdmin,
+            ),
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (err, stack) => Center(child: Text('خطأ: $err')),
           ),
@@ -221,14 +220,13 @@ class StudentProfileScreen extends ConsumerWidget {
                     Text(
                       AppStrings.weeklyProgress,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     weeklyProgressState.when(
-                      data: (weeklyProgress) => WeeklyProgressChart(
-                        progressByDay: weeklyProgress,
-                      ),
+                      data: (weeklyProgress) =>
+                          WeeklyProgressChart(progressByDay: weeklyProgress),
                       loading: () => const SizedBox(
                         height: 220,
                         child: Center(child: CircularProgressIndicator()),
@@ -261,7 +259,6 @@ class StudentProfileScreen extends ConsumerWidget {
 
           QuranCard(tracking: tracking, studentId: studentId, isAdmin: isAdmin),
           const SizedBox(height: 8),
-
           HabitsCard(
             tracking: tracking,
             studentId: studentId,

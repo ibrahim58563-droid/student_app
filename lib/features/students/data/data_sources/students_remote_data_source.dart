@@ -1,13 +1,21 @@
 import 'package:students_app/features/students/data/models/student_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 final class StudentsRemoteDataSource {
-  const StudentsRemoteDataSource();
+  StudentsRemoteDataSource([SupabaseClient? client])
+    : _client = client ?? Supabase.instance.client;
+
+  final SupabaseClient _client;
 
   Future<List<StudentModel>> fetchStudents() async {
-    return const [
-      StudentModel(id: '1', fullName: 'محمد أحمد', grade: 'Grade 8'),
-      StudentModel(id: '2', fullName: 'عبدالله خالد', grade: 'Grade 9'),
-      StudentModel(id: '3', fullName: 'Yousef Ali', grade: 'Grade 10'),
-    ];
+    final response = await _client
+        .from('profiles')
+        .select('id, full_name, grade, group_name, avatar_index')
+        .eq('role', 'student')
+        .order('full_name');
+
+    return (response as List)
+        .map((data) => StudentModel.fromMap(data as Map<String, dynamic>))
+        .toList();
   }
 }

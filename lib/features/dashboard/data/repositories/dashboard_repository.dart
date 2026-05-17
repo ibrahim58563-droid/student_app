@@ -1,4 +1,3 @@
-import 'package:students_app/core/utils/progress_calculator.dart';
 import 'package:students_app/features/dashboard/domain/models/student_summary.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -113,28 +112,12 @@ final class DashboardRepository {
     try {
       final today = DateTime.now();
       final endDate = DateTime(today.year, today.month, today.day);
-      final startDate = endDate.subtract(const Duration(days: 6));
-
-      final rows = await _supabaseClient
-          .from('daily_tracking')
-          .select()
-          .eq('student_id', studentId)
-          .gte('tracking_date', _formatDate(startDate))
-          .lte('tracking_date', _formatDate(endDate));
-
-      final history = (rows as List)
-          .whereType<Map>()
-          .map((row) => DailyTrackingData.fromJson(row.cast<String, dynamic>()))
-          .toList();
-
-      final progressByDate = <DateTime, double>{
-        for (final item in history) _dateOnly(item.date): calculateDailyProgress(item),
-      };
 
       final weeklyProgress = <DateTime, double>{};
       for (var offset = 6; offset >= 0; offset--) {
         final date = endDate.subtract(Duration(days: offset));
-        weeklyProgress[date] = progressByDate[date] ?? 0.0;
+        final progress = await _calculateTodayProgress(studentId, date);
+        weeklyProgress[date] = progress['progress'] as double;
       }
 
       return weeklyProgress;
@@ -290,12 +273,4 @@ final class DashboardRepository {
       return 0;
     }
   }
-
-  String _formatDate(DateTime date) {
-    return '${date.year.toString().padLeft(4, '0')}-'
-        '${date.month.toString().padLeft(2, '0')}-'
-        '${date.day.toString().padLeft(2, '0')}';
-  }
-
-  DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 }

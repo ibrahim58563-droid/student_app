@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:students_app/core/constants/app_strings.dart';
 import 'package:students_app/core/widgets/global_error_widget.dart';
 import 'package:students_app/features/auth/domain/entities/app_user.dart';
 import 'package:students_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:students_app/features/auth/presentation/register_screen.dart';
 import 'package:students_app/features/auth/presentation/screens/login_screen.dart';
 import 'package:students_app/features/dashboard/presentation/screens/admin_dashboard_screen.dart';
+import 'package:students_app/features/students/presentation/screens/add_edit_student_screen.dart';
 import 'package:students_app/features/students/presentation/screens/student_detail_screen.dart';
-import 'package:students_app/features/students/presentation/screens/student_list_screen.dart';
 import 'package:students_app/features/students/presentation/screens/student_profile_screen.dart';
+import 'package:students_app/features/students/presentation/screens/student_registry_screen.dart';
 
 // Helper: converts Riverpod state into a Listenable for GoRouter
 class _RouterNotifier extends ChangeNotifier {
@@ -35,13 +35,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return authState.when(
         data: (user) {
           if (user != null && isAuthenticating) {
-            return user.role == UserRole.admin
-                ? '/admin/dashboard'
-                : '/student/profile/${user.id}';
+            return  '/admin/dashboard';
+            //     : '/student/profile/${user.id}';
+            // return user.role == UserRole.admin
+            //     ? '/admin/dashboard'
+            //     : '/student/profile/${user.id}';
           }
 
           if (user == null && !isAuthenticating) {
-            return LoginScreen.routePath;
+          return LoginScreen.routePath;
           }
 
           return null;
@@ -68,15 +70,32 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin/students',
         name: 'admin-students',
-        builder: (context, state) => const StudentListScreen(),
-      ),
-      GoRoute(
-        path: '/admin/students/:studentId',
-        name: 'student-detail',
-        builder: (context, state) {
-          final studentId = state.pathParameters['studentId'] ?? '';
-          return StudentDetailScreen(studentId: studentId);
-        },
+        builder: (context, state) => const StudentRegistryScreen(),
+        routes: [
+          GoRoute(
+            path: 'add',
+            name: 'add-student',
+            builder: (context, state) => const AddEditStudentScreen(),
+          ),
+          GoRoute(
+            path: ':studentId',
+            name: 'student-detail',
+            builder: (context, state) {
+              final studentId = state.pathParameters['studentId'] ?? '';
+              return StudentDetailScreen(studentId: studentId);
+            },
+            routes: [
+              GoRoute(
+                path: 'edit',
+                name: 'edit-student',
+                builder: (context, state) {
+                  final studentId = state.pathParameters['studentId'] ?? '';
+                  return AddEditStudentScreen(studentId: studentId);
+                },
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/student/profile/:studentId',
@@ -89,9 +108,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/student/tracking/:studentId',
         name: 'student-tracking',
-        builder: (context, state) {
+        redirect: (context, state) {
           final studentId = state.pathParameters['studentId'] ?? '';
-          return TrackingScreenWithStudentId(studentId: studentId);
+          return '/student/profile/$studentId';
         },
       ),
     ],
@@ -104,17 +123,3 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
   );
 });
-
-class TrackingScreenWithStudentId extends StatelessWidget {
-  const TrackingScreenWithStudentId({required this.studentId, super.key});
-
-  final String studentId;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text(AppStrings.trackingTitle)),
-      body: Center(child: Text('Tracking for: $studentId')),
-    );
-  }
-}

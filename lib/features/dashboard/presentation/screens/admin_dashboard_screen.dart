@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:students_app/core/constants/app_strings.dart';
 import 'package:students_app/core/constants/app_colors.dart';
+import 'package:students_app/core/constants/app_strings.dart';
 import 'package:students_app/core/widgets/global_error_widget.dart';
 import 'package:students_app/features/dashboard/presentation/providers/dashboard_providers.dart';
-import 'package:students_app/features/dashboard/presentation/widgets/student_card_shimmer.dart';
 import 'package:students_app/features/dashboard/presentation/widgets/student_card.dart';
+import 'package:students_app/features/dashboard/presentation/widgets/student_card_shimmer.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -15,7 +15,8 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
   static const String routePath = '/admin/dashboard';
 
   @override
-  ConsumerState<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+  ConsumerState<AdminDashboardScreen> createState() =>
+      _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
@@ -75,7 +76,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
               // ========== Search Bar ==========
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: _horizontalPadding(context)),
+                padding: EdgeInsets.symmetric(
+                  horizontal: _horizontalPadding(context),
+                ),
                 child: Directionality(
                   textDirection: TextDirection.rtl,
                   child: TextField(
@@ -99,8 +102,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                               child: const Icon(Icons.close, size: 20),
                             )
                           : null,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -111,7 +116,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: _horizontalPadding(context)),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: _horizontalPadding(context),
+                  ),
                   child: Directionality(
                     textDirection: TextDirection.rtl,
                     child: Row(
@@ -190,9 +197,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       child: Center(
                         child: Text(
                           AppStrings.noStudents,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: AppColors.textSecondary),
                         ),
                       ),
                     );
@@ -219,36 +225,43 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 ),
                 error: (err, _) => Padding(
                   padding: const EdgeInsets.all(16),
-                  child: GlobalErrorWidget.supabase(onRetry: () {
-                    ref.invalidate(filteredStudentsProvider);
-                    ref.invalidate(groupNamesProvider);
-                    ref.invalidate(classInsightsProvider);
-                  }),
+                  child: GlobalErrorWidget.supabase(
+                    onRetry: () {
+                      ref.invalidate(filteredStudentsProvider);
+                      ref.invalidate(groupNamesProvider);
+                      ref.invalidate(classInsightsProvider);
+                    },
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
 
               // ========== Class Insights ==========
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: _horizontalPadding(context)),
+                padding: EdgeInsets.symmetric(
+                  horizontal: _horizontalPadding(context),
+                ),
                 child: Text(
                   AppStrings.classOverview,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
               insightsState.when(
                 data: (insights) => Padding(
-                  padding: EdgeInsets.symmetric(horizontal: _horizontalPadding(context)),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: _horizontalPadding(context),
+                  ),
                   child: Wrap(
                     spacing: 12,
                     runSpacing: 12,
                     children: [
                       _InsightCard(
                         title: AppStrings.averageProgress,
-                        value: '${(insights.averageProgress * 100).toStringAsFixed(1)}%',
+                        value:
+                            '${(insights.averageProgress * 100).toStringAsFixed(1)}%',
                         valueColor: AppColors.accentGreen,
                       ),
                       _InsightCard(
@@ -274,7 +287,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       // ========== FAB ==========
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Navigate to add student screen (to be implemented)
+          context.push('edit');
         },
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
@@ -313,24 +326,24 @@ class _InsightCard extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 8),
               Text(
                 value,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: valueColor,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: valueColor,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               if (suffix != null)
                 Text(
                   suffix!,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                    color: AppColors.textSecondary,
+                  ),
                 ),
             ],
           ),

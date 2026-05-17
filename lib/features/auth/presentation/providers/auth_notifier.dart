@@ -10,12 +10,12 @@ final authProvider = AsyncNotifierProvider<AuthNotifier, AppUser?>(
 
 /// Auth notifier - manages authentication state
 final class AuthNotifier extends AsyncNotifier<AppUser?> {
-  late AuthRepository _authRepository;
+  late AuthService _authService;
 
   @override
   Future<AppUser?> build() async {
-    _authRepository = AuthRepository(Supabase.instance.client);
-    return _authRepository.getCurrentUser();
+    _authService = AuthService(Supabase.instance.client);
+    return _authService.getCurrentUser();
   }
 
   /// Sign in with email and password
@@ -25,7 +25,7 @@ final class AuthNotifier extends AsyncNotifier<AppUser?> {
   }) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(
-      () => _authRepository.signInWithEmail(email: email, password: password),
+      () => _authService.signInWithEmail(email: email, password: password),
     );
   }
 
@@ -34,22 +34,20 @@ final class AuthNotifier extends AsyncNotifier<AppUser?> {
     required String email,
     required String password,
     required String fullName,
-    String role = 'student',
   }) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(
-      () => _authRepository.signUpWithEmail(
+      () => _authService.signUpWithEmail(
         email: email,
         password: password,
         fullName: fullName,
-        role: role,
       ),
     );
   }
 
   /// Sign out
   Future<void> signOut() async {
-    await _authRepository.signOut();
+    await _authService.signOut();
     state = const AsyncValue.data(null);
   }
 }
