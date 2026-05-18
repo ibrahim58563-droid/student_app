@@ -69,7 +69,7 @@ final class AuthService {
     required String email,
     required String password,
     required String fullName,
-    String role = 'student',
+    String role = 'admin',
   }) async {
     try {
       final response = await _supabaseClient.auth.signUp(
@@ -82,6 +82,14 @@ final class AuthService {
       if (userId == null) {
         throw UnknownAuthException('فشل إنشاء الحساب');
       }
+
+      // ← ضيف ده: احفظ الـ profile صراحةً
+      await _supabaseClient.from('profiles').upsert({
+        'id': userId,
+        'full_name': fullName,
+        'role': role,
+        'avatar_index': 0,
+      }, onConflict: 'id');
 
       return _fetchUserProfile(userId);
     } on AuthException {
@@ -122,7 +130,20 @@ final class AuthService {
           .from('profiles')
           .select('id, full_name, role')
           .eq('id', userId)
-          .single();
+          .maybeSingle(); // ← maybeSingle بدل single عشان ميطلعش exception
+
+      if (response == null) {
+        // الـ profile مش موجود — ارجع user بدون profile
+        return AppUser(
+          id: userId,
+          name:
+              _supabaseClient.auth.currentUser?.userMetadata?['full_name']
+                  as String? ??
+              'مستخدم',
+          email: _supabaseClient.auth.currentUser?.email ?? '',
+          role: UserRole.student,
+        );
+      }
 
       return AppUser(
         id: response['id'] as String,

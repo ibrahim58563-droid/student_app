@@ -1,24 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:students_app/core/constants/app_colors.dart';
+import 'package:students_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:students_app/features/auth/presentation/screens/login_screen.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-class RegisterScreen extends StatefulWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   static const String routePath = '/register';
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
   late final TextEditingController _passwordController;
   late final TextEditingController _confirmPasswordController;
+  String? _errorMessage;
 
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -48,56 +50,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
 
-    try {
-      final response = await Supabase.instance.client.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        data: {'full_name': _nameController.text.trim()},
-      );
+    await ref
+        .read(authProvider.notifier)
+        .signUpWithEmail(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+          fullName: _nameController.text.trim(),
+        );
 
-      final user = response.user;
-      if (user == null) {
-        throw const AuthException('failed signup user is null');
-      }
+    if (!mounted) return;
 
-      if (response.session == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
+    final authState = ref.read(authProvider);
+    authState.when(
+      data: (user) {
+        if (user != null) {
+          // session موجود — روح للطالب مباشرة
+          context.go('/student/profile/${user.id}');
+        } else {
+          // email confirmation مطلوب
+          ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'تم إنشاء الحساب بنجاح. فعّل بريدك الإلكتروني ثم سجّل الدخول',
-              ),
+              content: Text('تم إنشاء الحساب ✓ فعّل بريدك ثم سجّل الدخول'),
             ),
           );
-        context.go(LoginScreen.routePath);
-        return;
-      }
+          context.go('/login');
+        }
+      },
+      error: (error, _) {
+        setState(
+          () => _errorMessage = _getArabicError(error.toString().toLowerCase()),
+        );
+      },
+      loading: () {},
+    );
 
-      await Supabase.instance.client.from('profiles').upsert({
-        'id': user.id,
-        'full_name': _nameController.text.trim(),
-        'role': 'student',
-        'avatar_index': 0,
-      }, onConflict: 'id');
-
-      if (!mounted) return;
-      context.go('/student/profile/${user.id}');
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      _showError(_getArabicError(error.message.toLowerCase()));
-    } on PostgrestException catch (_) {
-      if (!mounted) return;
-      _showError('تعذر حفظ بيانات الحساب. حاول مرة أخرى');
-    } catch (e) {
-      if (!mounted) return;
-      _showError(e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _showError(String message) {
@@ -291,6 +278,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       validator: _validateConfirmPassword,
                     ),
                     const SizedBox(height: 32),
+                    if (_errorMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            border: Border.all(color: Colors.red.shade200),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                color: Colors.red.shade700,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _errorMessage!,
+                                  style: TextStyle(
+                                    color: Colors.red.shade700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     SizedBox(
                       width: double.infinity,
                       height: 64,

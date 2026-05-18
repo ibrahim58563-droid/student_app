@@ -143,28 +143,39 @@ final class StudentProfileRepository {
     }
   }
 
-  /// Calculate current streak
   Future<int> _calculateCurrentStreak(String studentId) async {
     try {
-      int streak = 0;
       final now = DateTime.now();
+      final thirtyDaysAgo = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(const Duration(days: 30));
+
+      final rows = await _supabaseClient
+          .from('daily_tracking')
+          .select('tracking_date')
+          .eq('student_id', studentId)
+          .gte(
+            'tracking_date',
+            thirtyDaysAgo.toIso8601String().split('T').first,
+          )
+          .order('tracking_date', ascending: false);
+
+      final dates = (rows as List)
+          .map((r) => DateTime.parse(r['tracking_date'] as String))
+          .toSet();
+
+      int streak = 0;
+      var day = DateTime(now.year, now.month, now.day);
 
       for (int i = 0; i < 30; i++) {
-        final date = DateTime(
-          now.year,
-          now.month,
-          now.day,
-        ).subtract(Duration(days: i));
-        final dateStr = date.toIso8601String().split('T').first;
-
-        final tracking = await _supabaseClient
-            .from('daily_tracking')
-            .select('id')
-            .eq('student_id', studentId)
-            .eq('tracking_date', dateStr);
-
-        if ((tracking as List).isEmpty) break;
-        streak++;
+        if (dates.contains(day)) {
+          streak++;
+          day = day.subtract(const Duration(days: 1));
+        } else {
+          break;
+        }
       }
       return streak;
     } catch (_) {

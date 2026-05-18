@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:students_app/core/constants/app_colors.dart';
 import 'package:students_app/features/dashboard/presentation/providers/dashboard_providers.dart';
 import 'package:students_app/features/dashboard/presentation/widgets/student_card_shimmer.dart';
+import 'package:students_app/features/students/presentation/screens/add_edit_student_screen.dart';
 
 class StudentRegistryScreen extends ConsumerStatefulWidget {
   const StudentRegistryScreen({super.key});
@@ -156,21 +157,54 @@ class _StudentRegistryScreenState extends ConsumerState<StudentRegistryScreen> {
 
             // ── Student List ─────────────────────────
             studentsState.when(
-              data: (students) => SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final student = students[index];
-                  return _StudentRegistryCard(
-                    name: student.fullName,
-                    subtitle: [
-                      student.grade,
-                      student.groupName,
-                    ].whereType<String>().join(' • '),
-                    masteryPercent: student.progressPercent,
-                    avatarIndex: student.avatarIndex,
-                    onTap: () => context.push('/admin/students/${student.id}'),
+              data: (students) {
+                // local filter للـ activeOnly
+                final filtered = _activeOnly
+                    ? students.where((s) => s.progressPercent > 0).toList()
+                    : students;
+
+                if (filtered.isEmpty) {
+                  return const SliverToBoxAdapter(
+                    child: Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: Text(
+                          'لا يوجد طلاب',
+                          style: TextStyle(
+                            color: Color(0xFF6B7280),
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
                   );
-                }, childCount: students.length),
-              ),
+                }
+
+                return SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverGrid(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.75,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                        ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final student = filtered[index];
+                      return _StudentGridCard(
+                        name: student.fullName,
+                        subtitle: [student.groupName, student.grade]
+                            .whereType<String>()
+                            .where((s) => s.isNotEmpty)
+                            .join(' • '),
+                        onTap: () =>
+                            context.push('/admin/students/${student.id}'),
+                      );
+                    }, childCount: filtered.length),
+                  ),
+                );
+              },
               loading: () => SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => const StudentCardShimmer(),
@@ -255,7 +289,9 @@ class _StudentRegistryScreenState extends ConsumerState<StudentRegistryScreen> {
 
       // FAB - Add Student
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/admin/students/add'),
+        onPressed: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const AddEditStudentScreen())),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.person_add, color: Colors.white),
         label: const Text('إضافة طالب', style: TextStyle(color: Colors.white)),
@@ -303,122 +339,99 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-class _StudentRegistryCard extends StatelessWidget {
-  const _StudentRegistryCard({
+class _StudentGridCard extends StatelessWidget {
+  const _StudentGridCard({
     required this.name,
     required this.subtitle,
-    required this.masteryPercent,
-    required this.avatarIndex,
     required this.onTap,
   });
 
   final String name;
   final String subtitle;
-  final int masteryPercent;
-  final int avatarIndex;
   final VoidCallback onTap;
-
-  static const _avatarColors = [
-    Color(0xFF8E44AD),
-    Color(0xFF3498DB),
-    Color(0xFF1ABC9C),
-    Color(0xFFE74C3C),
-    Color(0xFFF39C12),
-    Color(0xFF27AE60),
-  ];
 
   @override
   Widget build(BuildContext context) {
-    final color = _avatarColors[avatarIndex % _avatarColors.length];
-
     return GestureDetector(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFEDE8DC),
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Row(
-                children: [
-                  // Avatar (arched style)
-                  Container(
-                    width: 64,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: color.withAlpha((255 * 0.15).toInt()),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(32),
-                        topRight: Radius.circular(32),
-                        bottomLeft: Radius.circular(8),
-                        bottomRight: Radius.circular(8),
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : 'S',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                        ),
-                      ),
-                    ),
+            // Avatar arch
+            Container(
+              height: 110,
+              decoration: const BoxDecoration(
+                color: Color(0xFFCDD5C8),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(60),
+                  topRight: Radius.circular(60),
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4A5E48),
                   ),
-                  const SizedBox(width: 16),
-
-                  // Name + subtitle
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1A1A1A),
-                          ),
-                        ),
-                        if (subtitle.isNotEmpty)
-                          Text(
-                            subtitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-
-                  // Mastery %
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      const Text(
-                        'MASTERY\nLEVEL',
-                        textAlign: TextAlign.end,
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: Colors.grey,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      Text(
-                        '$masteryPercent%',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF1A1A1A),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
-            Divider(height: 1, color: Colors.grey.shade300),
+            const SizedBox(height: 10),
+
+            // Name
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: Color(0xFF1A1A1A),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+
+            // Subtitle (group/grade)
+            if (subtitle.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  subtitle.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF6B7280),
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+
+            const Spacer(),
+
+            // Gold accent bar
+            Container(
+              height: 6,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF59E0B),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+            ),
           ],
         ),
       ),

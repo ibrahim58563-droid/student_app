@@ -1,29 +1,33 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:students_app/features/dashboard/presentation/providers/dashboard_providers.dart';
 
-class AddEditStudentScreen extends StatefulWidget {
+class AddEditStudentScreen extends ConsumerStatefulWidget {
   const AddEditStudentScreen({this.studentId, super.key});
 
   final String? studentId; // null = add, non-null = edit
 
   static const String addPath = '/admin/students/add';
   static String editPath(String id) => '/admin/students/$id/edit';
-
-  @override
-  State<AddEditStudentScreen> createState() => _AddEditStudentScreenState();
+  @override  ConsumerState<AddEditStudentScreen> createState() => _AddEditStudentScreenState();
 }
 
-class _AddEditStudentScreenState extends State<AddEditStudentScreen> {
+class _AddEditStudentScreenState extends ConsumerState<AddEditStudentScreen> {  
   final _nameController = TextEditingController();
   final _academicYearController = TextEditingController();
   final _notesController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
 
   String? _selectedLevel;
   int _selectedAvatarIndex = 0;
   bool _isLoading = false;
+
+  File? _selectedImage;
+  final ImagePicker _picker = ImagePicker();
 
   final List<String> _levels = [
     'المرحلة الابتدائية',
@@ -102,39 +106,27 @@ class _AddEditStudentScreenState extends State<AddEditStudentScreen> {
           ).showSnackBar(const SnackBar(content: Text('تم حفظ التغييرات ✓')));
           context.pop();
         }
-      } else {
-        // Create new student account
-        final email = _emailController.text.trim();
-        final password = _passwordController.text.trim().isEmpty
-            ? 'Student@123'
-            : _passwordController.text.trim();
+    } else {
+  await Supabase.instance.client.from('profiles').insert({
+    'full_name': _nameController.text.trim(),
+    'role': 'student',
+    'grade': _academicYearController.text.trim(),
+    'group_name': _selectedLevel,
+    'notes': _notesController.text.trim(),
+    'avatar_index': _selectedAvatarIndex,
+  });
 
-        final response = await Supabase.instance.client.auth.signUp(
-          email: email,
-          password: password,
-          data: {'full_name': _nameController.text.trim()},
-        );
-
-        final userId = response.user?.id;
-        if (userId == null) throw Exception('فشل إنشاء الحساب');
-
-        await Supabase.instance.client.from('profiles').upsert({
-          'id': userId,
-          'full_name': _nameController.text.trim(),
-          'role': 'student',
-          'grade': _academicYearController.text.trim(),
-          'group_name': _selectedLevel,
-          'notes': _notesController.text.trim(),
-          'avatar_index': _selectedAvatarIndex,
-        }, onConflict: 'id');
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تم إضافة الطالب بنجاح ✓')),
-          );
-          context.pop();
-        }
-      }
+  if (mounted) {
+    // ← ضيف السطرين دول
+    ref.invalidate(allStudentsProvider);
+    ref.invalidate(filteredStudentsProvider);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم إضافة الطالب بنجاح ✓')),
+    );
+    context.pop();
+  }
+}
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -143,6 +135,18 @@ class _AddEditStudentScreenState extends State<AddEditStudentScreen> {
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 80,
+    );
+    if (image != null) {
+      setState(() => _selectedImage = File(image.path));
     }
   }
 
@@ -198,8 +202,8 @@ class _AddEditStudentScreenState extends State<AddEditStudentScreen> {
     _nameController.dispose();
     _academicYearController.dispose();
     _notesController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
+    // مفيش dispose للـ ImagePicker — بس تأكد إن _selectedImage بيتنظف
+    _selectedImage = null;
     super.dispose();
   }
 
@@ -234,42 +238,63 @@ class _AddEditStudentScreenState extends State<AddEditStudentScreen> {
                   Stack(
                     alignment: Alignment.bottomRight,
                     children: [
-                      Container(
-                        width: 180,
-                        height: 210,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFE8E0D0),
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(90),
-                            topRight: Radius.circular(90),
-                            bottomLeft: Radius.circular(16),
-                            bottomRight: Radius.circular(16),
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            _nameController.text.isNotEmpty
-                                ? _nameController.text[0].toUpperCase()
-                                : 'A',
-                            style: const TextStyle(
-                              fontSize: 72,
-                              fontWeight: FontWeight.w300,
-                              color: Color(0xFFADB8A6),
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: Container(
+                          width: 180,
+                          height: 210,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFE8E0D0),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(90),
+                              topRight: Radius.circular(90),
+                              bottomLeft: Radius.circular(16),
+                              bottomRight: Radius.circular(16),
                             ),
                           ),
+                          child: _selectedImage != null
+                              ? ClipRRect(
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(90),
+                                    topRight: Radius.circular(90),
+                                    bottomLeft: Radius.circular(16),
+                                    bottomRight: Radius.circular(16),
+                                  ),
+                                  child: Image.file(
+                                    _selectedImage!,
+                                    fit: BoxFit.cover,
+                                    width: 180,
+                                    height: 210,
+                                  ),
+                                )
+                              : Center(
+                                  child: Text(
+                                    _nameController.text.isNotEmpty
+                                        ? _nameController.text[0].toUpperCase()
+                                        : 'A',
+                                    style: const TextStyle(
+                                      fontSize: 72,
+                                      fontWeight: FontWeight.w300,
+                                      color: Color(0xFFADB8A6),
+                                    ),
+                                  ),
+                                ),
                         ),
                       ),
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1B3A2D),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt_rounded,
-                          color: Colors.white,
-                          size: 20,
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF1B3A2D),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ],
@@ -285,38 +310,13 @@ class _AddEditStudentScreenState extends State<AddEditStudentScreen> {
                     fontWeight: FontWeight.w600,
                   ),
                   const SizedBox(height: 24),
-
-                  // Email (only for new student)
-                  if (!isEditing) ...[
-                    _buildUnderlineField(
-                      label: 'EMAIL',
-                      controller: _emailController,
-                      hint: 'student@email.com',
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 24),
-                    _buildUnderlineField(
-                      label: 'PASSWORD (OPTIONAL)',
-                      controller: _passwordController,
-                      hint: 'Default: Student@123',
-                      obscure: true,
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Level & Academic Year Row
-                  Row(
-                    children: [
-                      Expanded(child: _buildLevelDropdown()),
-                      const SizedBox(width: 24),
-                      Expanded(
-                        child: _buildUnderlineField(
-                          label: 'ACADEMIC YEAR',
-                          controller: _academicYearController,
-                          hint: '2024–2025',
-                        ),
-                      ),
-                    ],
+                  // Level & Academic Year (stacked)
+                  _buildLevelDropdown(),
+                  const SizedBox(height: 24),
+                  _buildUnderlineField(
+                    label: 'ACADEMIC YEAR',
+                    controller: _academicYearController,
+                    hint: '2024–2025',
                   ),
                   const SizedBox(height: 24),
 
@@ -460,7 +460,8 @@ class _AddEditStudentScreenState extends State<AddEditStudentScreen> {
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: _selectedLevel,
-          hint: const Text('Select a level'),
+          hint: const Text('level'),
+
           decoration: InputDecoration(
             filled: false,
             border: const UnderlineInputBorder(),

@@ -6,6 +6,7 @@ import 'package:students_app/core/constants/app_strings.dart';
 import 'package:students_app/features/auth/data/repositories/auth_repository.dart';
 import 'package:students_app/features/auth/domain/entities/app_user.dart';
 import 'package:students_app/features/auth/presentation/providers/auth_notifier.dart';
+import 'package:students_app/features/auth/presentation/register_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -255,9 +256,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       TextButton(
-                        onPressed: isLoading
-                            ? null
-                            : () => context.go('/register'),
+                        onPressed: () => context.go(RegisterScreen.routePath),
                         style: TextButton.styleFrom(
                           padding: EdgeInsets.zero,
                           minimumSize: const Size(0, 0),

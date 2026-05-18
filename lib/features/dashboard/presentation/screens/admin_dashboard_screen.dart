@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:students_app/core/constants/app_colors.dart';
 import 'package:students_app/core/constants/app_strings.dart';
+import 'package:students_app/core/constants/app_text_styles.dart';
 import 'package:students_app/core/widgets/global_error_widget.dart';
 import 'package:students_app/features/dashboard/presentation/providers/dashboard_providers.dart';
 import 'package:students_app/features/dashboard/presentation/widgets/student_card.dart';
 import 'package:students_app/features/dashboard/presentation/widgets/student_card_shimmer.dart';
+import 'package:students_app/features/students/presentation/screens/add_edit_student_screen.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -38,33 +40,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   Widget build(BuildContext context) {
     final studentsState = ref.watch(filteredStudentsProvider);
     final groupsState = ref.watch(groupNamesProvider);
-    final insightsState = ref.watch(classInsightsProvider);
     final selectedGroup = ref.watch(groupFilterProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text(AppStrings.dashboardTitle),
+        title: Text(AppStrings.dashboardTitle),
+        titleTextStyle: AppTextStyles.heading1,
         elevation: 0,
         centerTitle: true,
-        leading: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              shape: BoxShape.circle,
-            ),
-            child: const Center(
-              child: Icon(Icons.person, color: Colors.white, size: 20),
-            ),
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
-          ),
-        ],
       ),
       // ========== Body ==========
       body: SafeArea(
@@ -234,51 +218,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
 
-              // ========== Class Insights ==========
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: _horizontalPadding(context),
-                ),
-                child: Text(
-                  AppStrings.classOverview,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              insightsState.when(
-                data: (insights) => Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: _horizontalPadding(context),
-                  ),
-                  child: Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _InsightCard(
-                        title: AppStrings.averageProgress,
-                        value:
-                            '${(insights.averageProgress * 100).toStringAsFixed(1)}%',
-                        valueColor: AppColors.accentGreen,
-                      ),
-                      _InsightCard(
-                        title: AppStrings.topStreak,
-                        value: '${insights.topStreak}',
-                        suffix: AppStrings.days,
-                        valueColor: AppColors.primary,
-                      ),
-                    ],
-                  ),
-                ),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: StudentCardShimmer(),
-                ),
-                error: (err, _) => const SizedBox.shrink(),
-              ),
               const SizedBox(height: 80), // Space for FAB
             ],
           ),
@@ -286,9 +226,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       ),
       // ========== FAB ==========
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          context.push('edit');
-        },
+        onPressed: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const AddEditStudentScreen())),
         backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
       ),
@@ -298,57 +238,5 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   double _horizontalPadding(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     return width < 380 ? 12 : 16;
-  }
-}
-
-class _InsightCard extends StatelessWidget {
-  const _InsightCard({
-    required this.title,
-    required this.value,
-    required this.valueColor,
-    this.suffix,
-  });
-
-  final String title;
-  final String value;
-  final String? suffix;
-  final Color valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 170,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: valueColor,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              if (suffix != null)
-                Text(
-                  suffix!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

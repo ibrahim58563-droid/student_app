@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:students_app/core/widgets/global_error_widget.dart';
-import 'package:students_app/features/auth/domain/entities/app_user.dart';
 import 'package:students_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:students_app/features/auth/presentation/register_screen.dart';
 import 'package:students_app/features/auth/presentation/screens/login_screen.dart';
@@ -35,7 +33,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return authState.when(
         data: (user) {
           if (user != null && isAuthenticating) {
-            return  '/admin/dashboard';
+            return '/admin/dashboard';
             //     : '/student/profile/${user.id}';
             // return user.role == UserRole.admin
             //     ? '/admin/dashboard'
@@ -43,7 +41,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
 
           if (user == null && !isAuthenticating) {
-          return LoginScreen.routePath;
+            return LoginScreen.routePath;
           }
 
           return null;
@@ -72,6 +70,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: 'admin-students',
         builder: (context, state) => const StudentRegistryScreen(),
         routes: [
+          // ✅ add لازم تيجي الأول
           GoRoute(
             path: 'add',
             name: 'add-student',
@@ -84,16 +83,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               final studentId = state.pathParameters['studentId'] ?? '';
               return StudentDetailScreen(studentId: studentId);
             },
-            routes: [
-              GoRoute(
-                path: 'edit',
-                name: 'edit-student',
-                builder: (context, state) {
-                  final studentId = state.pathParameters['studentId'] ?? '';
-                  return AddEditStudentScreen(studentId: studentId);
-                },
-              ),
-            ],
+            routes: [],
           ),
         ],
       ),
@@ -113,11 +103,35 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return '/student/profile/$studentId';
         },
       ),
+      GoRoute(
+        path: 'edit',
+        name: 'edit-student',
+        builder: (context, state) {
+          final studentId = state.pathParameters['studentId'] ?? '';
+          return AddEditStudentScreen(studentId: studentId);
+        },
+      ),
     ],
     errorBuilder: (context, state) {
       return Scaffold(
-        body: GlobalErrorWidget.supabase(
-          onRetry: () => context.go(LoginScreen.routePath),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                state.error.toString(), // ← اعرض الـ error الحقيقي
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Location: ${state.uri}', // ← اعرض الـ URL
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
         ),
       );
     },
