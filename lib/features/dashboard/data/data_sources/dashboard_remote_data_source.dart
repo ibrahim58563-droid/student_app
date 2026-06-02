@@ -8,17 +8,23 @@ final class DashboardRemoteDataSource {
 
   Future<Map<String, int>> fetchSummary() async {
     try {
+      final userId = _client.auth.currentUser?.id;
+      if (userId == null) {
+        throw const AuthException('No authenticated user found.');
+      }
       final studentsResponse = await _client
           .from('profiles')
           .select('id')
-          .eq('role', 'student');
+          .eq('role', 'student')
+          .eq('admin_id', userId);
       final totalStudents = (studentsResponse as List).length;
 
       final today = DateTime.now().toIso8601String().split('T').first;
       final trackingResponse = await _client
           .from('daily_tracking')
           .select('id')
-          .eq('tracking_date', today);
+          .eq('tracking_date', today)
+          .eq('admin_id', userId);
       final todayTracking = (trackingResponse as List).length;
 
       return {

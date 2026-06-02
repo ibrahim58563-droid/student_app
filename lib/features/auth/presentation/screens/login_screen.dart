@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:students_app/core/constants/app_colors.dart';
 import 'package:students_app/core/constants/app_strings.dart';
-import 'package:students_app/features/auth/data/repositories/auth_repository.dart';
 import 'package:students_app/features/auth/domain/entities/app_user.dart';
 import 'package:students_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:students_app/features/auth/presentation/register_screen.dart';
@@ -23,6 +22,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   late TextEditingController _passwordController;
   bool _obscurePassword = true;
   String? _errorMessage;
+
+  String _formatError(Object error) {
+    final msg = error.toString();
+    if (msg.contains('Failed host lookup') ||
+        msg.contains('SocketException') ||
+        msg.contains('No address associated')) {
+      return 'تعذر الاتصال بالإنترنت، تأكد من اتصالك وأعد المحاولة';
+    }
+    if (msg.contains('Invalid login credentials')) {
+      return 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+    }
+    if (msg.contains('Email not confirmed')) {
+      return 'برجاء تأكيد بريدك الإلكتروني أولاً';
+    }
+    if (msg.contains('User already registered')) {
+      return 'هذا البريد الإلكتروني مسجل بالفعل';
+    }
+    if (msg.contains('Password should be at least')) {
+      return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+    }
+    return 'حدث خطأ، أعد المحاولة';
+  }
 
   @override
   void initState() {
@@ -64,22 +85,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
       },
       error: (error, _) {
-        setState(
-          () => _errorMessage = error is AuthException
-              ? error.message
-              : 'حدث خطأ غير متوقع',
-        );
+        setState(() => _errorMessage = _formatError(error));
       },
       loading: () {},
     );
   }
 
   void _navigateBasedOnRole(AppUser user) {
-    if (user.role == UserRole.admin) {
-      context.go('/admin/dashboard');
-    } else {
-      context.go('/student/profile/${user.id}');
-    }
+    // if (user.role == UserRole.admin) {
+    context.go('/admin/dashboard');
+    // } else {
+    //   context.go('/student/profile/${user.id}');
+    // }
   }
 
   @override

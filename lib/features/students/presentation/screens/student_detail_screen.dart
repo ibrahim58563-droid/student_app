@@ -1,5 +1,5 @@
-
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:students_app/features/students/presentation/screens/add_edit_student_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -199,10 +199,16 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
 
         final data = snapshot.data!;
         final profile = data['profile'] as Map<String, dynamic>;
-        final ibadaat = data['ibadaat'] as Map<String, dynamic>? ?? {};
-        final quran = data['quran'] as List<Map<String, dynamic>> ?? [];
-        final habits = data['habits'] as List<Map<String, dynamic>> ?? [];
-        final study = data['study'] as List<Map<String, dynamic>> ?? [];
+        final ibadaat = (data['ibadaat'] as Map<String, dynamic>?) ?? {};
+        final quran =
+            (data['quran'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
+            [];
+        final habits =
+            (data['habits'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
+            [];
+        final study =
+            (data['study'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ??
+            [];
         final tracking = data['tracking'] as Map<String, dynamic>?;
 
         final fullName = profile['full_name'] as String? ?? 'Student';
@@ -414,21 +420,53 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                             title: 'عبادات',
                             icon: Icons.mosque_outlined,
                             items: ibadaatItems,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DailyProgressScreen(
+                                  studentId: widget.studentId,
+                                ),
+                              ),
+                            ),
                           ),
                           _SectionCard(
                             title: 'القرآن',
                             icon: Icons.menu_book_outlined,
                             items: quranItems,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DailyProgressScreen(
+                                  studentId: widget.studentId,
+                                ),
+                              ),
+                            ),
                           ),
                           _SectionCard(
                             title: 'عادات',
                             icon: Icons.self_improvement,
                             items: habitsItems,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DailyProgressScreen(
+                                  studentId: widget.studentId,
+                                ),
+                              ),
+                            ),
                           ),
                           _SectionCard(
                             title: 'دراسة',
                             icon: Icons.school_outlined,
                             items: studyItems,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DailyProgressScreen(
+                                  studentId: widget.studentId,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -473,10 +511,8 @@ class _CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
         if (showEditButton && studentId != null)
           IconButton(
             icon: const Icon(Icons.edit, color: textPrimary),
-            onPressed: () {
-              // Navigate to edit screen
-              Navigator.pushNamed(context, AddEditStudentScreen.editPath(studentId!));
-            },
+            onPressed: () =>
+                context.push(AddEditStudentScreen.editPath(studentId!)),
           ),
       ],
     );
@@ -491,67 +527,72 @@ class _SectionCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.items,
+    this.onTap,
   });
 
   final String title;
   final IconData icon;
   final List<Map<String, dynamic>> items;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 16, color: primary),
-                const SizedBox(width: 6),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: textPrimary,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 16, color: primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: textPrimary,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...items.map((item) {
-              final completed = item['completed'] as bool;
-              final name = item['name'] as String;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  children: [
-                    Icon(
-                      completed
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                      size: 16,
-                      color: completed ? primary : Colors.grey,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        name,
-                        style: const TextStyle(fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...items.map((item) {
+                final completed = item['completed'] as bool;
+                final name = item['name'] as String;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Icon(
+                        completed
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
+                        size: 16,
+                        color: completed ? primary : Colors.grey,
                       ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ],
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: const TextStyle(fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
         ),
       ),
     );

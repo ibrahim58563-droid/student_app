@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:students_app/features/auth/domain/entities/app_user.dart';
 import 'package:students_app/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:students_app/features/auth/presentation/register_screen.dart';
 import 'package:students_app/features/auth/presentation/screens/login_screen.dart';
@@ -25,30 +26,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: LoginScreen.routePath,
     refreshListenable: notifier,
     redirect: (context, state) {
-      final authState = ref.read(authProvider);
+      final authValue = ref.read(authProvider);
+
+      // If state is still loading, don't redirect yet
+      if (authValue.isLoading) return null;
+
+      final user = authValue.value;
       final isAuthenticating =
           state.matchedLocation == LoginScreen.routePath ||
           state.matchedLocation == RegisterScreen.routePath;
 
-      return authState.when(
-        data: (user) {
-          if (user != null && isAuthenticating) {
-            return '/admin/dashboard';
-            //     : '/student/profile/${user.id}';
-            // return user.role == UserRole.admin
-            //     ? '/admin/dashboard'
-            //     : '/student/profile/${user.id}';
-          }
+      if (user != null && isAuthenticating) {
+        return user.role == UserRole.admin
+            ? '/admin/dashboard'
+            : '/student/profile/${user.id}';
+      }
 
-          if (user == null && !isAuthenticating) {
-            return LoginScreen.routePath;
-          }
+      if (user == null && !isAuthenticating) {
+        return LoginScreen.routePath;
+      }
 
-          return null;
-        },
-        loading: () => null,
-        error: (error, stackTrace) => LoginScreen.routePath,
-      );
+      return null;
     },
     routes: [
       GoRoute(
@@ -83,7 +81,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               final studentId = state.pathParameters['studentId'] ?? '';
               return StudentDetailScreen(studentId: studentId);
             },
-            routes: [],
+            routes: [
+              GoRoute(
+                path: 'edit',
+                name: 'edit-student',
+                builder: (context, state) {
+                  final studentId = state.pathParameters['studentId'] ?? '';
+                  return AddEditStudentScreen(studentId: studentId);
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -101,14 +108,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         redirect: (context, state) {
           final studentId = state.pathParameters['studentId'] ?? '';
           return '/student/profile/$studentId';
-        },
-      ),
-      GoRoute(
-        path: 'edit',
-        name: 'edit-student',
-        builder: (context, state) {
-          final studentId = state.pathParameters['studentId'] ?? '';
-          return AddEditStudentScreen(studentId: studentId);
         },
       ),
     ],

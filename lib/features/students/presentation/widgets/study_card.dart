@@ -113,23 +113,6 @@ class _StudyCardState extends ConsumerState<StudyCard>
     }
   }
 
-  Future<void> _removeSubject(String sessionId) async {
-    if (sessionId.isEmpty) return;
-    try {
-      await Supabase.instance.client
-          .from('study_sessions')
-          .delete()
-          .eq('id', sessionId);
-      ref.invalidate(studentTrackingProvider(widget.studentId));
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('خطأ في الحذف: $e')));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isLoading = ref

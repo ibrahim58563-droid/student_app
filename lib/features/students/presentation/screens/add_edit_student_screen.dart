@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:students_app/features/dashboard/presentation/providers/dashboard_providers.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AddEditStudentScreen extends ConsumerStatefulWidget {
   const AddEditStudentScreen({this.studentId, super.key});
@@ -14,10 +14,12 @@ class AddEditStudentScreen extends ConsumerStatefulWidget {
 
   static const String addPath = '/admin/students/add';
   static String editPath(String id) => '/admin/students/$id/edit';
-  @override  ConsumerState<AddEditStudentScreen> createState() => _AddEditStudentScreenState();
+  @override
+  ConsumerState<AddEditStudentScreen> createState() =>
+      _AddEditStudentScreenState();
 }
 
-class _AddEditStudentScreenState extends ConsumerState<AddEditStudentScreen> {  
+class _AddEditStudentScreenState extends ConsumerState<AddEditStudentScreen> {
   final _nameController = TextEditingController();
   final _academicYearController = TextEditingController();
   final _notesController = TextEditingController();
@@ -36,15 +38,6 @@ class _AddEditStudentScreenState extends ConsumerState<AddEditStudentScreen> {
     'Beginner',
     'Intermediate Grammar',
     'Advanced',
-  ];
-
-  final List<Color> _avatarColors = [
-    const Color(0xFF8E44AD),
-    const Color(0xFF3498DB),
-    const Color(0xFF1ABC9C),
-    const Color(0xFFE74C3C),
-    const Color(0xFFF39C12),
-    const Color(0xFF27AE60),
   ];
 
   bool get isEditing => widget.studentId != null;
@@ -106,27 +99,28 @@ class _AddEditStudentScreenState extends ConsumerState<AddEditStudentScreen> {
           ).showSnackBar(const SnackBar(content: Text('تم حفظ التغييرات ✓')));
           context.pop();
         }
-    } else {
-  await Supabase.instance.client.from('profiles').insert({
-    'full_name': _nameController.text.trim(),
-    'role': 'student',
-    'grade': _academicYearController.text.trim(),
-    'group_name': _selectedLevel,
-    'notes': _notesController.text.trim(),
-    'avatar_index': _selectedAvatarIndex,
-  });
+      } else {
+        await Supabase.instance.client.from('profiles').insert({
+          'full_name': _nameController.text.trim(),
+          'role': 'student',
+          'admin_id': Supabase.instance.client.auth.currentUser!.id,
+          'grade': _academicYearController.text.trim(),
+          'group_name': _selectedLevel,
+          'notes': _notesController.text.trim(),
+          'avatar_index': _selectedAvatarIndex,
+        });
 
-  if (mounted) {
-    // ← ضيف السطرين دول
-    ref.invalidate(allStudentsProvider);
-    ref.invalidate(filteredStudentsProvider);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم إضافة الطالب بنجاح ✓')),
-    );
-    context.pop();
-  }
-}
+        if (mounted) {
+          // ← ضيف السطرين دول
+          ref.invalidate(allStudentsProvider);
+          ref.invalidate(filteredStudentsProvider);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم إضافة الطالب بنجاح ✓')),
+          );
+          context.pop();
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -391,9 +385,12 @@ class _AddEditStudentScreenState extends ConsumerState<AddEditStudentScreen> {
                       ),
                       onPressed: _isLoading ? null : _save,
                       child: _isLoading
-                          ? const CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
+                          ? SizedBox(
+                              width: 24,
+                              child: const CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
                             )
                           : Text(
                               isEditing ? 'Save Changes' : 'Add Student',

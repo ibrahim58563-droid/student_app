@@ -1,29 +1,31 @@
-import 'package:students_app/features/auth/domain/entities/app_user.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 
-/// Represents authentication errors with specific types
-sealed class AuthException implements Exception {
+import 'package:students_app/features/auth/domain/entities/app_user.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
+
+/// Represents application-specific authentication errors
+sealed class AppAuthException implements Exception {
   final String message;
-  AuthException(this.message);
+  AppAuthException(this.message);
 
   @override
   String toString() => message;
 }
 
-final class InvalidCredentialsException extends AuthException {
+final class InvalidCredentialsException extends AppAuthException {
   InvalidCredentialsException()
     : super('البريد الإلكتروني أو كلمة المرور غير صحيحة');
 }
 
-final class UserAlreadyExistsException extends AuthException {
+final class UserAlreadyExistsException extends AppAuthException {
   UserAlreadyExistsException() : super('هذا البريد الإلكتروني مسجل بالفعل');
 }
 
-final class NetworkException extends AuthException {
+final class NetworkException extends AppAuthException {
   NetworkException() : super('خطأ في الاتصال. يرجى التحقق من اتصال الإنترنت');
 }
 
-final class UnknownAuthException extends AuthException {
+final class UnknownAuthException extends AppAuthException {
   UnknownAuthException(super.message);
 }
 
@@ -31,19 +33,18 @@ final class UnknownAuthException extends AuthException {
 final class AuthService {
   const AuthService(this._supabaseClient);
 
-  final SupabaseClient _supabaseClient;
+  final supabase.SupabaseClient _supabaseClient;
 
   /// Sign in with email and password
-  /// Throws [AuthException] on failure
+  /// Throws [AppAuthException] on failure
   Future<AppUser> signInWithEmail({
     required String email,
     required String password,
   }) async {
     try {
-      final response = await _supabaseClient.auth.signInWithPassword(
-        email: email.trim(),
-        password: password,
-      );
+      final response = await _supabaseClient.auth
+          .signInWithPassword(email: email.trim(), password: password)
+          .timeout(const Duration(seconds: 15));
 
       final userId = response.user?.id;
       if (userId == null) {
@@ -51,20 +52,29 @@ final class AuthService {
       }
 
       return _fetchUserProfile(userId);
-    } on AuthException {
+    } on AppAuthException {
       rethrow;
-    } catch (e) {
-      if (e.toString().contains('Invalid login credentials')) {
+    } on TimeoutException {
+      throw NetworkException();
+    } on supabase.AuthException catch (e) {
+      if (e.message.contains('Invalid login credentials')) {
         throw InvalidCredentialsException();
-      } else if (e.toString().contains('network')) {
+      }
+      throw UnknownAuthException(e.message);
+    } catch (e) {
+      final errorStr = e.toString();
+      if (errorStr.contains('network') ||
+          errorStr.contains('SocketException') ||
+          errorStr.contains('Failed host lookup') ||
+          errorStr.contains('No address associated')) {
         throw NetworkException();
       }
-      throw UnknownAuthException(e.toString());
+      throw UnknownAuthException(errorStr);
     }
   }
 
   /// Sign up with email and password
-  /// Throws [AuthException] on failure
+  /// Throws [AppAuthException] on failure
   Future<AppUser> signUpWithEmail({
     required String email,
     required String password,
@@ -72,11 +82,13 @@ final class AuthService {
     String role = 'admin',
   }) async {
     try {
-      final response = await _supabaseClient.auth.signUp(
-        email: email.trim(),
-        password: password,
-        data: {'full_name': fullName, 'role': role, 'avatar_index': 0},
-      );
+      final response = await _supabaseClient.auth
+          .signUp(
+            email: email.trim(),
+            password: password,
+            data: {'full_name': fullName, 'role': role, 'avatar_index': 0},
+          )
+          .timeout(const Duration(seconds: 15));
 
       final userId = response.user?.id;
       if (userId == null) {
@@ -92,25 +104,38 @@ final class AuthService {
       }, onConflict: 'id');
 
       return _fetchUserProfile(userId);
-    } on AuthException {
+    } on AppAuthException {
       rethrow;
-    } catch (e) {
-      if (e.toString().contains('already registered')) {
+    } on TimeoutException {
+      throw NetworkException();
+    } on supabase.AuthException catch (e) {
+      if (e.message.contains('already registered')) {
         throw UserAlreadyExistsException();
-      } else if (e.toString().contains('network')) {
+      }
+      throw UnknownAuthException(e.message);
+    } catch (e) {
+      final errorStr = e.toString();
+      if (errorStr.contains('already registered')) {
+        throw UserAlreadyExistsException();
+      } else if (errorStr.contains('network') ||
+          errorStr.contains('SocketException') ||
+          errorStr.contains('Failed host lookup') ||
+          errorStr.contains('No address associated')) {
         throw NetworkException();
       }
-      throw UnknownAuthException(e.toString());
+      throw UnknownAuthException(errorStr);
     }
   }
 
   /// Get current authenticated user
   Future<AppUser?> getCurrentUser() async {
     try {
-      final userId = _supabaseClient.auth.currentUser?.id;
-      if (userId == null) {
+      final session = _supabaseClient.auth.currentSession;
+      if (session == null || session.isExpired) {
         return null;
       }
+
+      final userId = session.user.id;
       return _fetchUserProfile(userId);
     } catch (e) {
       return null;
@@ -130,7 +155,10 @@ final class AuthService {
           .from('profiles')
           .select('id, full_name, role')
           .eq('id', userId)
-          .maybeSingle(); // ← maybeSingle بدل single عشان ميطلعش exception
+          .maybeSingle()
+          .timeout(
+            const Duration(seconds: 10),
+          ); // ← maybeSingle بدل single عشان ميطلعش exception
 
       if (response == null) {
         // الـ profile مش موجود — ارجع user بدون profile
@@ -151,8 +179,17 @@ final class AuthService {
         email: _supabaseClient.auth.currentUser?.email ?? '',
         role: _parseRole(response['role'] as String? ?? 'student'),
       );
+    } on TimeoutException {
+      throw NetworkException();
     } catch (e) {
-      throw UnknownAuthException('فشل في جلب بيانات المستخدم');
+      final errorStr = e.toString();
+      if (errorStr.contains('network') ||
+          errorStr.contains('SocketException') ||
+          errorStr.contains('Failed host lookup') ||
+          errorStr.contains('No address associated')) {
+        throw NetworkException();
+      }
+      throw UnknownAuthException('فشل في جلب بيانات المستخدم: $errorStr');
     }
   }
 

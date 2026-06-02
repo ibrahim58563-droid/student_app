@@ -26,6 +26,28 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
+  String _formatError(Object error) {
+    final msg = error.toString();
+    if (msg.contains('Failed host lookup') ||
+        msg.contains('SocketException') ||
+        msg.contains('No address associated')) {
+      return 'تعذر الاتصال بالإنترنت، تأكد من اتصالك وأعد المحاولة';
+    }
+    if (msg.contains('Invalid login credentials')) {
+      return 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+    }
+    if (msg.contains('Email not confirmed')) {
+      return 'برجاء تأكيد بريدك الإلكتروني أولاً';
+    }
+    if (msg.contains('User already registered')) {
+      return 'هذا البريد الإلكتروني مسجل بالفعل';
+    }
+    if (msg.contains('Password should be at least')) {
+      return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+    }
+    return 'حدث خطأ، أعد المحاولة';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -65,7 +87,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       data: (user) {
         if (user != null) {
           // session موجود — روح للطالب مباشرة
-          context.go('/student/profile/${user.id}');
+          // context.go('/student/profile/${user.id}');
+          context.go('/admin/dashboard');
         } else {
           // email confirmation مطلوب
           ScaffoldMessenger.of(context).showSnackBar(
@@ -77,33 +100,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         }
       },
       error: (error, _) {
-        setState(
-          () => _errorMessage = _getArabicError(error.toString().toLowerCase()),
-        );
+        setState(() => _errorMessage = _formatError(error));
       },
       loading: () {},
     );
 
     if (mounted) setState(() => _isLoading = false);
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  String _getArabicError(String error) {
-    if (error.contains('already registered')) {
-      return 'البريد الإلكتروني مسجل مسبقاً';
-    }
-    if (error.contains('invalid email')) {
-      return 'البريد الإلكتروني غير صحيح';
-    }
-    if (error.contains('weak password')) {
-      return 'كلمة المرور ضعيفة جداً';
-    }
-    return error;
   }
 
   String? _validateFullName(String? value) {

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:students_app/core/providers/connectivity_provider.dart';
 import 'package:students_app/core/router/app_router.dart';
 import 'package:students_app/core/theme/app_theme.dart';
+import 'package:students_app/core/widgets/no_internet_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
@@ -23,7 +25,13 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final connectivityState = ref.watch(connectivityProvider);
     final router = ref.watch(appRouterProvider);
+
+    final isDisconnected = connectivityState.maybeWhen(
+      data: (isConnected) => !isConnected,
+      orElse: () => false,
+    );
 
     return MaterialApp.router(
       title: 'متابعة الطلاب',
@@ -33,7 +41,11 @@ class MyApp extends ConsumerWidget {
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
-          child: child ?? const SizedBox.shrink(),
+          child: isDisconnected
+              ? NoInternetScreen(
+                  onRetry: () => ref.invalidate(connectivityProvider),
+                )
+              : (child ?? const SizedBox.shrink()),
         );
       },
     );

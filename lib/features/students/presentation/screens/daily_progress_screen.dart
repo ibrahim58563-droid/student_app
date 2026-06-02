@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,10 +9,17 @@ const Color accent = Color(0xFFF59E0B);
 const Color textPrimary = Color(0xFF1A1A1A);
 const Color textSecondary = Color(0xFF6B7280);
 
+enum DailyProgressSection { ibadaat, quran, habits, study }
+
 class DailyProgressScreen extends StatefulWidget {
-  const DailyProgressScreen({required this.studentId, super.key});
+  const DailyProgressScreen({
+    required this.studentId,
+    this.initialSection,
+    super.key,
+  });
 
   final String studentId;
+  final DailyProgressSection? initialSection;
 
   @override
   State<DailyProgressScreen> createState() => _DailyProgressScreenState();
@@ -22,31 +28,110 @@ class DailyProgressScreen extends StatefulWidget {
 class _DailyProgressScreenState extends State<DailyProgressScreen> {
   late Future<Map<String, dynamic>> progressDataFuture;
 
+  String _friendlyErrorMessage(Object error) {
+    final msg = error.toString();
+
+    if (msg.contains('row-level security') ||
+        msg.contains('42501') ||
+        msg.contains('Forbidden')) {
+      return 'ليس لديك صلاحية لإضافة أو تعديل المتابعة لهذا الطالب. راجع RLS في Supabase.';
+    }
+
+    if (msg.contains('Failed host lookup') || msg.contains('SocketException')) {
+      return 'تعذر الاتصال بالإنترنت. تحقق من الشبكة وحاول مجددًا.';
+    }
+
+    return 'حدث خطأ أثناء حفظ البيانات. حاول مرة أخرى.';
+  }
+
+  void _showErrorSnack(Object error) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(_friendlyErrorMessage(error))));
+  }
+
+  String get _today => DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  ).toIso8601String().split('T').first;
+
   @override
   void initState() {
     super.initState();
     progressDataFuture = _fetchProgressData();
   }
 
+  Future<String?> _getTrackingId() async {
+    final supabase = Supabase.instance.client;
+
+    final existingTracking = await supabase
+        .from('daily_tracking')
+        .select('id')
+        .eq('student_id', widget.studentId)
+        .eq('tracking_date', _today)
+        .maybeSingle();
+
+    return existingTracking?['id'] as String?;
+  }
+
+  Future<String> _ensureTracking() async {
+    final supabase = Supabase.instance.client;
+
+    // Try to get existing tracking
+    final existingId = await _getTrackingId();
+    if (existingId != null) {
+      return existingId;
+    }
+
+    // Create new tracking if doesn't exist
+    try {
+      final newTracking = await supabase
+          .from('daily_tracking')
+          .insert({'student_id': widget.studentId, 'tracking_date': _today})
+          .select('id')
+          .single();
+
+      return newTracking['id'] as String;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> _ensureIbadaatRecord(String trackingId) async {
+    final supabase = Supabase.instance.client;
+
+    final existingIbadaat = await supabase
+        .from('ibadaat')
+        .select('id')
+        .eq('tracking_id', trackingId)
+        .maybeSingle();
+
+    if (existingIbadaat != null) {
+      return;
+    }
+
+    await supabase.from('ibadaat').insert({
+      'tracking_id': trackingId,
+      'fajr': false,
+      'dhuhr': false,
+      'asr': false,
+      'maghrib': false,
+      'isha': false,
+      'morning_adhkar': false,
+      'evening_adhkar': false,
+    });
+  }
+
   Future<Map<String, dynamic>> _fetchProgressData() async {
     try {
       final supabase = Supabase.instance.client;
 
-      // Fetch today's tracking records
-      final now = DateTime.now();
-      final today = DateTime(
-        now.year,
-        now.month,
-        now.day,
-      ).toString().split(' ')[0];
+      final trackingId = await _getTrackingId();
 
-      final tracking = await supabase
-          .from('daily_tracking')
-          .select()
-          .eq('student_id', widget.studentId)
-          .eq('tracking_date', today);
-
-      if (tracking.isEmpty) {
+      if (trackingId == null) {
         return {
           'tracking': null,
           'ibadaat': {},
@@ -56,8 +141,13 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
         };
       }
 
-      final trackingData = tracking[0];
-      final trackingId = trackingData['id'];
+      final trackingData = await supabase
+          .from('daily_tracking')
+          .select()
+          .eq('id', trackingId)
+          .single();
+
+      await _ensureIbadaatRecord(trackingId);
 
       // Fetch ibadaat data
       final ibadaatList = await supabase
@@ -118,11 +208,13 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
 
     double quranScore = 0;
     if (quran.isNotEmpty) {
-      final q = quran[0];
-      final hifzPages = (q['hifz_pages'] ?? 0) as int;
-      final revisionPages = (q['revision_pages'] ?? 0) as int;
-      if (hifzPages > 0) quranScore += 0.5;
-      if (revisionPages > 0) quranScore += 0.5;
+      final completed = quran.where((q) {
+        final hifzPages = (q['hifz_pages'] ?? 0) as int;
+        final revisionPages = (q['revision_pages'] ?? 0) as int;
+        final tilawahDone = q['tilawah_done'] as bool? ?? false;
+        return hifzPages > 0 || revisionPages > 0 || tilawahDone;
+      }).length;
+      quranScore = completed / quran.length;
     }
 
     double habitsScore = 0;
@@ -144,66 +236,91 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
-            appBar: const _CustomAppBar(title: 'Daily Progress'),
+            appBar: const _CustomAppBar(title: 'إدارة المهام اليومية'),
             body: const Center(child: CircularProgressIndicator()),
           );
         }
 
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: const _CustomAppBar(title: 'Daily Progress'),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Error: ${snapshot.error}',
-                    style: const TextStyle(color: textSecondary),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => setState(() {
-                      progressDataFuture = _fetchProgressData();
-                    }),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        final data = snapshot.data!;
-        final tracking = data['tracking'] as Map<String, dynamic>?;
-
-        if (tracking == null) {
-          return Scaffold(
-            appBar: const _CustomAppBar(title: 'Daily Progress'),
+            appBar: const _CustomAppBar(title: 'إدارة المهام اليومية'),
             backgroundColor: background,
             body: SafeArea(
               child: Center(
-                child: Text(
-                  'لا توجد بيانات لهذا اليوم',
-                  style: TextStyle(color: textSecondary),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 64,
+                        color: Colors.amber.shade600,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'حدث خطأ',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'تأكد من:\n• اتصالك بالإنترنت\n• اختيارك للطالب الصحيح\n• وجود بيانات متابعة لهذا اليوم',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: textSecondary,
+                          height: 1.6,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: () => setState(() {
+                          progressDataFuture = _fetchProgressData();
+                        }),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('حاول مجدداً'),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_back),
+                        label: const Text('العودة'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           );
         }
 
-        final ibadaat = data['ibadaat'] as Map<String, dynamic>;
-        final quran = data['quran'] as List<Map<String, dynamic>>;
-        final habits = data['habits'] as List<Map<String, dynamic>>;
-        final study = data['study'] as List<Map<String, dynamic>>;
+        final data = snapshot.data!;
+        final ibadaatRaw = data['ibadaat'];
+        final ibadaat = ibadaatRaw is Map
+            ? Map<String, dynamic>.from(ibadaatRaw)
+            : <String, dynamic>{};
+        final quran = (data['quran'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        final habits = (data['habits'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        final study = (data['study'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
 
         final progressPercent = _calcProgress(ibadaat, quran, habits, study);
-
-        final now = DateTime.now();
-        final dateStr =
-            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        final dateStr = _today;
 
         return Scaffold(
-          appBar: _CustomAppBar(title: 'Daily Progress', date: dateStr),
+          appBar: _CustomAppBar(title: 'إدارة المهام اليومية', date: dateStr),
           backgroundColor: background,
           body: SafeArea(
             child: SingleChildScrollView(
@@ -213,45 +330,69 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
                   textDirection: TextDirection.rtl,
                   child: Column(
                     children: [
-                      // Summary Card
+                      // Summary Card with Progress Bar
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           color: cardBg,
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
+                            // Header row
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'SUMMARY',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: textSecondary,
-                                    letterSpacing: 1.2,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'SUMMARY',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: textSecondary,
+                                        letterSpacing: 1.2,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                      'الإنجاز اليومي',
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'الإنجاز اليومي',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    color: textPrimary,
+                                Text(
+                                  '$progressPercent%',
+                                  style: const TextStyle(
+                                    fontSize: 48,
+                                    fontWeight: FontWeight.w800,
+                                    color: primary,
                                   ),
                                 ),
                               ],
                             ),
-                            Text(
-                              '$progressPercent%',
-                              style: const TextStyle(
-                                fontSize: 40,
-                                fontWeight: FontWeight.w800,
-                                color: primary,
+                            const SizedBox(height: 16),
+                            // Progress bar
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                value: progressPercent / 100,
+                                minHeight: 8,
+                                backgroundColor: Colors.grey.shade300,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  progressPercent >= 70
+                                      ? primary
+                                      : progressPercent >= 40
+                                      ? accent
+                                      : Colors.red.shade300,
+                                ),
                               ),
                             ),
                           ],
@@ -264,6 +405,41 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
                         title: 'عبادات',
                         subtitle: 'IBADAAT',
                         items: _buildIbadaatItems(ibadaat),
+                        onToggle: (item) async {
+                          final field = item['field'] as String;
+                          try {
+                            final trackingId = await _ensureTracking();
+                            await _ensureIbadaatRecord(trackingId);
+                            final currentIbadaat = await Supabase
+                                .instance
+                                .client
+                                .from('ibadaat')
+                                .select()
+                                .eq('tracking_id', trackingId)
+                                .single();
+                            final current = currentIbadaat[field] ?? false;
+                            await Supabase.instance.client
+                                .from('ibadaat')
+                                .update({field: !current})
+                                .eq('id', currentIbadaat['id']);
+                          } catch (e) {
+                            _showErrorSnack(e);
+                          }
+                          setState(() {
+                            progressDataFuture = _fetchProgressData();
+                          });
+                        },
+                        onAdd: () async {
+                          try {
+                            final tId = await _ensureTracking();
+                            await _ensureIbadaatRecord(tId);
+                            setState(() {
+                              progressDataFuture = _fetchProgressData();
+                            });
+                          } catch (e) {
+                            _showErrorSnack(e);
+                          }
+                        },
                       ),
                       const SizedBox(height: 20),
 
@@ -272,6 +448,29 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
                         title: 'القرآن',
                         subtitle: 'QURAN',
                         items: _buildQuranItems(quran),
+                        onToggle: (item) async {
+                          final id = item['id'] as String;
+                          final current = item['completed'] as bool;
+                          try {
+                            await Supabase.instance.client
+                                .from('quran_tracking')
+                                .update({'tilawah_done': !current})
+                                .eq('id', id);
+                          } catch (e) {
+                            _showErrorSnack(e);
+                          }
+                          setState(() {
+                            progressDataFuture = _fetchProgressData();
+                          });
+                        },
+                        onAdd: () async {
+                          try {
+                            final tId = await _ensureTracking();
+                            await _addQuranTask(tId);
+                          } catch (e) {
+                            _showErrorSnack(e);
+                          }
+                        },
                       ),
                       const SizedBox(height: 20),
 
@@ -280,6 +479,64 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
                         title: 'عادات',
                         subtitle: 'HABITS',
                         items: _buildHabitsItems(habits),
+                        onToggle: (item) async {
+                          try {
+                            final id = item['id'];
+                            final current = item['completed'] as bool;
+                            await Supabase.instance.client
+                                .from('habits')
+                                .update({'is_completed': !current})
+                                .eq('id', id);
+                          } catch (e) {
+                            _showErrorSnack(e);
+                          }
+                          setState(() {
+                            progressDataFuture = _fetchProgressData();
+                          });
+                        },
+                        onAdd: () async {
+                          final nameController = TextEditingController();
+                          final result = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('أضف عادة جديدة'),
+                              content: TextField(
+                                controller: nameController,
+                                decoration: const InputDecoration(
+                                  hintText: 'اسم العادة',
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('إلغاء'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('إضافة'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (result == true &&
+                              nameController.text.trim().isNotEmpty) {
+                            try {
+                              final tId = await _ensureTracking();
+                              await Supabase.instance.client
+                                  .from('habits')
+                                  .insert({
+                                    'tracking_id': tId,
+                                    'habit_name': nameController.text.trim(),
+                                    'is_completed': false,
+                                  });
+                            } catch (e) {
+                              _showErrorSnack(e);
+                            }
+                            setState(() {
+                              progressDataFuture = _fetchProgressData();
+                            });
+                          }
+                        },
                       ),
                       const SizedBox(height: 20),
 
@@ -288,6 +545,64 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
                         title: 'دراسة',
                         subtitle: 'STUDY',
                         items: _buildStudyItems(study),
+                        onToggle: (item) async {
+                          try {
+                            final id = item['id'];
+                            final current = item['completed'] as bool;
+                            await Supabase.instance.client
+                                .from('study_sessions')
+                                .update({'hours_spent': current ? 0 : 1})
+                                .eq('id', id);
+                          } catch (e) {
+                            _showErrorSnack(e);
+                          }
+                          setState(() {
+                            progressDataFuture = _fetchProgressData();
+                          });
+                        },
+                        onAdd: () async {
+                          final nameController = TextEditingController();
+                          final result = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('أضف جلسة دراسة'),
+                              content: TextField(
+                                controller: nameController,
+                                decoration: const InputDecoration(
+                                  hintText: 'المادة',
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('إلغاء'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('إضافة'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (result == true &&
+                              nameController.text.trim().isNotEmpty) {
+                            try {
+                              final tId = await _ensureTracking();
+                              await Supabase.instance.client
+                                  .from('study_sessions')
+                                  .insert({
+                                    'tracking_id': tId,
+                                    'subject': nameController.text.trim(),
+                                    'hours_spent': 0,
+                                  });
+                            } catch (e) {
+                              _showErrorSnack(e);
+                            }
+                            setState(() {
+                              progressDataFuture = _fetchProgressData();
+                            });
+                          }
+                        },
                       ),
                     ],
                   ),
@@ -301,38 +616,55 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
   }
 
   List<Map<String, dynamic>> _buildIbadaatItems(Map<String, dynamic> ibadaat) {
+    final id = ibadaat['id'] as String?;
+
+    // Return items even if id is null - they just won't be editable until tracking is created
     return [
       {
+        'id': id,
+        'field': 'fajr',
         'name': 'الفجر',
         'completed': ibadaat['fajr'] ?? false,
         'icon': Icons.mosque_outlined,
       },
       {
+        'id': id,
+        'field': 'dhuhr',
         'name': 'الظهر',
         'completed': ibadaat['dhuhr'] ?? false,
         'icon': Icons.mosque_outlined,
       },
       {
+        'id': id,
+        'field': 'asr',
         'name': 'العصر',
         'completed': ibadaat['asr'] ?? false,
         'icon': Icons.mosque_outlined,
       },
       {
+        'id': id,
+        'field': 'maghrib',
         'name': 'المغرب',
         'completed': ibadaat['maghrib'] ?? false,
         'icon': Icons.mosque_outlined,
       },
       {
+        'id': id,
+        'field': 'isha',
         'name': 'العشاء',
         'completed': ibadaat['isha'] ?? false,
         'icon': Icons.mosque_outlined,
       },
       {
+        'id': id,
+        'field': 'morning_adhkar',
         'name': 'أذكار الصباح',
         'completed': ibadaat['morning_adhkar'] ?? false,
         'icon': Icons.light_mode_outlined,
       },
       {
+        'id': id,
+        'field': 'evening_adhkar',
         'name': 'أذكار المساء',
         'completed': ibadaat['evening_adhkar'] ?? false,
         'icon': Icons.dark_mode_outlined,
@@ -343,36 +675,18 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
   List<Map<String, dynamic>> _buildQuranItems(
     List<Map<String, dynamic>> quran,
   ) {
-    if (quran.isEmpty) {
-      return [
-        {'name': 'حفظ', 'completed': false, 'icon': Icons.menu_book_outlined},
-        {
-          'name': 'مراجعة',
-          'completed': false,
-          'icon': Icons.menu_book_outlined,
-        },
-        {'name': 'تلاوة', 'completed': false, 'icon': Icons.menu_book_outlined},
-      ];
-    }
-
-    final q = quran[0];
-    return [
-      {
-        'name': 'حفظ',
-        'completed': (q['hifz_pages'] ?? 0) > 0,
-        'icon': Icons.menu_book_outlined,
-      },
-      {
-        'name': 'مراجعة',
-        'completed': (q['revision_pages'] ?? 0) > 0,
-        'icon': Icons.menu_book_outlined,
-      },
-      {
-        'name': 'تلاوة',
-        'completed': q['tilawah_done'] ?? false,
-        'icon': Icons.menu_book_outlined,
-      },
-    ];
+    return quran
+        .map(
+          (q) => {
+            'id': q['id'],
+            'name': (q['current_surah'] as String? ?? '').trim().isEmpty
+                ? 'مهمة قرآن'
+                : q['current_surah'] as String,
+            'completed': q['tilawah_done'] as bool? ?? false,
+            'icon': Icons.menu_book_outlined,
+          },
+        )
+        .toList();
   }
 
   List<Map<String, dynamic>> _buildHabitsItems(
@@ -381,6 +695,7 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
     return habits
         .map(
           (h) => {
+            'id': h['id'],
             'name': h['habit_name'] as String? ?? '',
             'completed': h['is_completed'] as bool? ?? false,
             'icon': Icons.self_improvement,
@@ -395,12 +710,62 @@ class _DailyProgressScreenState extends State<DailyProgressScreen> {
     return study
         .map(
           (s) => {
+            'id': s['id'],
             'name': s['subject'] as String? ?? '',
             'completed': (s['hours_spent'] as num? ?? 0) > 0,
             'icon': Icons.school_outlined,
           },
         )
         .toList();
+  }
+
+  Future<void> _addQuranTask(String trackingId) async {
+    final controller = TextEditingController();
+    final title = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('إضافة مهمة قرآن'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'مثال: سورة الكهف، مراجعة جزء عم... ',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+              child: const Text('إضافة'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (title == null || title.isEmpty) return;
+
+    try {
+      await Supabase.instance.client.from('quran_tracking').insert({
+        'tracking_id': trackingId,
+        'current_surah': title,
+        'hifz_pages': 0,
+        'revision_pages': 0,
+        'tilawah_done': false,
+      });
+      if (mounted) {
+        setState(() {
+          progressDataFuture = _fetchProgressData();
+        });
+      }
+    } catch (e) {
+      _showErrorSnack(e);
+    }
   }
 }
 
@@ -418,7 +783,11 @@ class _CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: true,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios, color: textPrimary),
-        onPressed: () => Navigator.pop(context),
+        onPressed: () {
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (context.mounted) Navigator.pop(context);
+          });
+        },
       ),
       title: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -450,26 +819,27 @@ class _ProgressSection extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.items,
+    this.onToggle,
+    this.onAdd,
   });
 
   final String title;
   final String subtitle;
   final List<Map<String, dynamic>> items;
+  final Future<void> Function(Map<String, dynamic> item)? onToggle;
+  final Future<void> Function()? onAdd;
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     final completed = items.where((i) => i['completed'] as bool).length;
     final total = items.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Section Header
         Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -479,15 +849,16 @@ class _ProgressSection extends StatelessWidget {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 18,
                       fontWeight: FontWeight.w700,
                       color: textPrimary,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: textSecondary,
                       letterSpacing: 0.5,
                       fontWeight: FontWeight.w600,
@@ -495,58 +866,139 @@ class _ProgressSection extends StatelessWidget {
                   ),
                 ],
               ),
-              Text(
-                '$completed/$total COMPLETED',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: textSecondary,
-                  letterSpacing: 0.5,
-                ),
+              Row(
+                children: [
+                  if (onAdd != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: FloatingActionButton.small(
+                          onPressed: () => onAdd?.call(),
+                          backgroundColor: Colors.white,
+                          elevation: 0,
+                          child: const Icon(
+                            Icons.add,
+                            color: primary,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                  Text(
+                    '$completed/$total COMPLETED',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: textSecondary,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        const Divider(color: textSecondary, thickness: 0.5, height: 16),
-        ...items.map((item) {
-          final name = item['name'] as String;
-          final completed = item['completed'] as bool;
-          final icon = item['icon'] as IconData;
+        // Items list
+        if (items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Center(
+              child: Text(
+                'لا توجد عناصر بعد',
+                style: TextStyle(color: textSecondary, fontSize: 14),
+              ),
+            ),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: items.asMap().entries.map((entry) {
+                final index = entry.key;
+                final item = entry.value;
+                final name = item['name'] as String;
+                final isCompleted = item['completed'] as bool;
+                final icon = item['icon'] as IconData;
+                final isLast = index == items.length - 1;
 
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+                return Column(
                   children: [
-                    Icon(
-                      icon,
-                      size: 18,
-                      color: completed ? primary : Colors.grey.shade400,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      name,
-                      style: TextStyle(
-                        decoration: completed
-                            ? TextDecoration.lineThrough
-                            : null,
-                        color: completed ? Colors.grey : textPrimary,
-                        fontSize: 14,
+                    InkWell(
+                      onTap: onToggle != null ? () => onToggle!(item) : null,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    icon,
+                                    size: 20,
+                                    color: isCompleted
+                                        ? primary
+                                        : Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: TextStyle(
+                                        decoration: isCompleted
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                        color: isCompleted
+                                            ? Colors.grey.shade500
+                                            : textPrimary,
+                                        fontSize: 14,
+                                        fontWeight: isCompleted
+                                            ? FontWeight.w400
+                                            : FontWeight.w500,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            GestureDetector(
+                              onTap: onToggle != null
+                                  ? () => onToggle!(item)
+                                  : null,
+                              child: Icon(
+                                isCompleted
+                                    ? Icons.check_circle
+                                    : Icons.check_circle_outline,
+                                color: isCompleted
+                                    ? primary
+                                    : Colors.grey.shade300,
+                                size: 24,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                    if (!isLast)
+                      Divider(
+                        color: Colors.grey.shade200,
+                        thickness: 0.5,
+                        height: 0,
+                        indent: 44,
+                        endIndent: 12,
+                      ),
                   ],
-                ),
-                Icon(
-                  completed ? Icons.check_box : Icons.check_box_outline_blank,
-                  color: completed ? primary : Colors.grey.shade300,
-                  size: 20,
-                ),
-              ],
+                );
+              }).toList(),
             ),
-          );
-        }),
+          ),
         const SizedBox(height: 8),
       ],
     );

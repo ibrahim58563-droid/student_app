@@ -8,10 +8,12 @@ final class StudentsRemoteDataSource {
   final SupabaseClient _client;
 
   Future<List<StudentModel>> fetchStudents() async {
+    final userId = _client.auth.currentUser?.id;
     final response = await _client
         .from('profiles')
         .select('id, full_name, grade, group_name, avatar_index')
         .eq('role', 'student')
+        .eq('admin_id', userId!)
         .order('full_name');
 
     return (response as List)
